@@ -64,7 +64,11 @@ export const useReactionsStore = create<ReactionsState>()(
   persist(
     (set, get) => ({
       reactions: [],
-      plates: [],
+      plates: [{
+        id: '1',
+        name: 'Plate 1',
+        isActive: true
+      }], // Initialize with a default plate
       selectedItems: new Set(),
       selectedOrder: [],
       lastSelectedIndex: -1,
@@ -91,6 +95,17 @@ export const useReactionsStore = create<ReactionsState>()(
         } else {
           // If no active plate, use the first plate as default
           plateId = activePlate?.id || state.plates[0]?.id;
+          
+          // If still no plateId, create a default plate
+          if (!plateId) {
+            const defaultPlate = {
+              id: '1',
+              name: 'Plate 1',
+              isActive: true
+            };
+            state.plates = [defaultPlate];
+            plateId = defaultPlate.id;
+          }
         }
         
         return {
@@ -204,7 +219,17 @@ export const useReactionsStore = create<ReactionsState>()(
         const state = get();
         const activePlate = state.plates.find(plate => plate.isActive);
         // If no active plate, return the first plate as default
-        return activePlate || state.plates[0];
+        if (activePlate) return activePlate;
+        if (state.plates.length > 0) return state.plates[0];
+        
+        // If somehow there are no plates, create a default one
+        const defaultPlate = {
+          id: '1',
+          name: 'Plate 1',
+          isActive: true
+        };
+        set({ plates: [defaultPlate] });
+        return defaultPlate;
       },
 
       // Selection actions
@@ -339,7 +364,19 @@ export const useReactionsStore = create<ReactionsState>()(
         }
         // If no plateId provided, get the active plate or default to first plate
         const activePlate = state.plates.find(plate => plate.isActive);
-        const targetPlateId = activePlate?.id || state.plates[0]?.id;
+        let targetPlateId = activePlate?.id || state.plates[0]?.id;
+        
+        // If still no targetPlateId, create a default plate
+        if (!targetPlateId) {
+          const defaultPlate = {
+            id: '1',
+            name: 'Plate 1',
+            isActive: true
+          };
+          state.plates = [defaultPlate];
+          targetPlateId = defaultPlate.id;
+        }
+        
         return state.reactions.find(r => r.state === position && r.plateId === targetPlateId);
       },
       

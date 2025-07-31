@@ -55,6 +55,15 @@ export default function Home() {
     setIsClient(true);
   }, []);
 
+  // Ensure there's always at least one plate available
+  useEffect(() => {
+    if (isClient && plates.length === 0) {
+      // This should not happen with the store changes, but as a safety measure
+      const { addPlate } = useReactionsStore.getState();
+      addPlate();
+    }
+  }, [isClient, plates.length]);
+
   // Helper function to calculate preview wells for multi-drag
   const calculatePreviewWells = (targetPosition: string, selectedItems: string[]) => {
     const previewPositions = new Set<string>();
@@ -106,13 +115,18 @@ export default function Home() {
     const grid: Well[][] = [];
     const activePlate = getActivePlate();
     
+    // Safety check - if no active plate, return empty grid
+    if (!activePlate) {
+      return grid;
+    }
+    
     for (let col = 0; col < 8; col++) {
       const colLetter = String.fromCharCode(65 + col);
       const colWells: Well[] = [];
       
       for (let row = 1; row <= 12; row++) {
         const position = `${colLetter}${row.toString().padStart(2, '0')}`;
-        const reaction = getReactionAtPosition(position, activePlate?.id);
+        const reaction = getReactionAtPosition(position, activePlate.id);
         
         colWells.push({
           col: colLetter,
@@ -348,8 +362,18 @@ export default function Home() {
   const wells = createWellGrid();
   const usedItems = getUsedItems(); // Show all used items globally
   const activePlate = getActivePlate();
-  const activeDefunctWells: Set<string> = activePlate ? getDefunctWellsForPlate(activePlate.id) : new Set();
-  const activeCCWells: Set<string> = activePlate ? getCCWellsForPlate(activePlate.id) : new Set();
+  
+  // Safety check - if no active plate, show loading or error state
+  if (!activePlate) {
+    return (
+      <div className="flex h-screen bg-gray-50 w-[100vw] items-center justify-center">
+        <div className="text-center text-gray-500">Loading plate data...</div>
+      </div>
+    );
+  }
+  
+  const activeDefunctWells: Set<string> = getDefunctWellsForPlate(activePlate.id);
+  const activeCCWells: Set<string> = getCCWellsForPlate(activePlate.id);
 
 
 
