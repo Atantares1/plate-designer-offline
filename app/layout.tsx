@@ -7,8 +7,8 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "96-well Designer",
-  description: "A 96-well plate management application",
+  title: "96-well Plate Designer",
+  description: "Plate management application",
 };
 
 export default function RootLayout({
