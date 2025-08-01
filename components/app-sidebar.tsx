@@ -66,13 +66,13 @@ function DraggableItem({ reaction, isSelected, selectedItems, selectedOrder, onC
         )}
         onClick={onClick}
       >
-        <div
-          className="cursor-grab active:cursor-grabbing invisible group-hover:visible"
-          {...attributes}
-          {...listeners}
-        >
-          <GripVertical className="size-4 w-8" />
-        </div>
+      <div
+        className="cursor-grab active:cursor-grabbing invisible group-hover:visible size-8 flex items-center justify-center"
+        {...attributes}
+        {...listeners}
+      >
+        <GripVertical className="size-4" />
+      </div>
         
         <div className="flex flex-col items-start flex-1 min-w-0">
           <span 
@@ -187,7 +187,7 @@ export function AppSidebar({
         </div>
       </div>
       <div className="flex-1 overflow-auto p-2">
-        <div className="space-y-1">
+        <div className="space-y-0">
           {unusedReactions.map((reaction, index) => {
             const isSelected = selectedItems.has(reaction.id)
             return (
