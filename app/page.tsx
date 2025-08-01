@@ -679,7 +679,7 @@ export default function Home() {
               justify-content: center;
             }
             .well-primer {
-              font-size: 12px;
+              font-size: 10px;
               color: #f00;
               margin-top: auto;
               word-break: break-all;
@@ -733,7 +733,6 @@ export default function Home() {
                 display: flex !important;
                 align-items: center !important;
                 justify-content: center !important;
-                padding: 2px 4px !important;
               }
             }
           </style>

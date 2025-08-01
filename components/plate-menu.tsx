@@ -88,7 +88,6 @@ export function PlateMenu() {
       >
         {/* Plate List */}
         <div className="flex min-h-[30vh] flex-col bg-white border border-gray-200 shadow-lg rounded-md w-40 max-h-[50vh]">
-          {/* Plate List */}
           <div className="flex-1 overflow-y-auto p-1 space-y-0.5">
             {plates.map((plate) => (
               <div

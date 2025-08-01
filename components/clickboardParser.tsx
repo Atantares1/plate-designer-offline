@@ -33,46 +33,85 @@ export default function ClipboardParser({ onParseSuccess, onParseError }: Clipbo
           const rows = clipboardText.trim().split("\n")
           const parsedReactions: Reaction[] = []
           let currentId = idCounterRef.current
+          let hasValidationErrors = false
+          let errorMessages: string[] = []
 
-          rows.forEach((row) => {
+          rows.forEach((row, rowIndex) => {
             const columns = row.split("\t")
 
-            // Default headers: name, primer
-            const name = (columns[0] || "").trim().replace(/\//g, "-")
-            const primerData = (columns[1] || "").trim()
+            // Check for empty rows
+            if (!row.trim()) {
+              hasValidationErrors = true
+              errorMessages.push(`第 ${rowIndex + 1}行: 为空`)
+              return
+            }
 
-            if (!name && !primerData) return // Skip completely empty rows
+            // Validate that we have exactly 2 columns
+            if (columns.length !== 2) {
+              hasValidationErrors = true
+              errorMessages.push(`第 ${rowIndex + 1} 行: 需要两列，只找到 ${columns.length} 列`)
+              return
+            }
+
+            const name = columns[0].trim().replace(/\//g, "-")
+            const primerData = columns[1].trim()
+
+            // Both columns must have non-empty data
+            if (!name || !primerData) {
+              hasValidationErrors = true
+              errorMessages.push(`第 ${rowIndex + 1} 行: 引物或样品为空`)
+              return
+            }
 
             // Check if primer column contains semicolon-separated values
             if (primerData.includes(";")) {
               // Split by semicolon and create separate entries
               const primers = primerData.split(";")
+              let hasValidPrimers = false
+              
               primers.forEach((primer) => {
                 const trimmedPrimer = primer.trim()
-                if (trimmedPrimer || name) {
-                  // Only add if there's at least a name or primer
+                if (trimmedPrimer) {
+                  hasValidPrimers = true
                   parsedReactions.push({
                     id: currentId.toString(),
-                    name: name || `Reaction ${currentId}`,
-                    primer: trimmedPrimer || `Primer ${currentId}`,
+                    name: name,
+                    primer: trimmedPrimer,
                     state: 'unused',
                     plateId: undefined // No plate assigned - global list
                   })
                   currentId++
                 }
               })
+              
+              if (!hasValidPrimers) {
+                hasValidationErrors = true
+                errorMessages.push(`Row ${rowIndex + 1}: 引物不合规`)
+              }
             } else {
               // Single entry
               parsedReactions.push({
                 id: currentId.toString(),
-                name: name || `Reaction ${currentId}`,
-                primer: primerData || `Primer ${currentId}`,
+                name: name,
+                primer: primerData,
                 state: 'unused',
                 plateId: undefined // No plate assigned - global list
               })
               currentId++
             }
           })
+
+          // If there are validation errors, show them and prevent action
+          if (hasValidationErrors) {
+            const errorMsg = `数据格式错误，共 ${errorMessages.length} 个问题`
+            console.warn("Validation errors:", errorMessages)
+            toast.error(errorMsg, {
+              description: errorMessages.slice(0, 3).join("; ") + (errorMessages.length > 3 ? "..." : ""),
+              duration: 5000,
+            })
+            onParseError?.(errorMsg)
+            return
+          }
 
           // Update the ID counter ref
           idCounterRef.current = currentId
