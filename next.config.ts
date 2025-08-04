@@ -1,7 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
-};
+  basePath: '/plate-designer',
+  assetPrefix: '/plate-designer',
+  images: {
+    unoptimized: true, 
+  },
+
+}
 
 export default nextConfig;

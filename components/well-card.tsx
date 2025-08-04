@@ -23,7 +23,7 @@ export function WellCard({ well, isDefunct, isCC }: WellCardProps) {
   const hasReaction = !!well.reaction;
   
   return (
-    <div className="h-full w-full flex flex-col justify-between select-none">
+    <div className="h-full  w-full flex flex-col justify-between select-none">
       <div className={`text-[10px] text-center select-none ${hasReaction ? 'text-blue-600' : isDefunct ? 'text-red-600' : isCC ? 'text-yellow-600' : 'text-gray-400'}`}>
         {well.col}{well.row}
       </div>

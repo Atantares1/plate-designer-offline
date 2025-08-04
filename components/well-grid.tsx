@@ -85,7 +85,7 @@ function DroppableWell({ well, isDefunct, isCC, isPreview, isMultiDrag, onRightC
     <div
       ref={setNodeRef}
       className={`
-        ${wellSize} border-2 rounded-md p-1 transition-all duration-200 cursor-pointer select-none relative
+        ${wellSize}  border-2 rounded-md p-1 transition-all duration-200 cursor-pointer select-none relative
         ${isDefunct 
           ? 'bg-red-200 border-red-400 opacity-60' 
           : isCC

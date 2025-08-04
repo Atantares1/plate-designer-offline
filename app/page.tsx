@@ -397,9 +397,9 @@ export default function Home() {
     
     // Generate well data rows - ALL wells (96 wells total)
     const wellRows = [];
-    for (let col = 0; col < 8; col++) {
-      const colLetter = String.fromCharCode(65 + col);
-      for (let row = 1; row <= 12; row++) {
+    for (let row = 1; row <= 12; row++) {
+      for (let col = 0; col < 8; col++) {
+        const colLetter = String.fromCharCode(65 + col);
         const position = `${colLetter}${row.toString().padStart(2, '0')}`;
         
         // Find reaction that is placed in this well position on the current plate
@@ -410,7 +410,7 @@ export default function Home() {
         // Determine sample name based on well state
         let sampleName = '-'; // Default for empty wells
         if (reaction) {
-          sampleName = reaction.name;
+          sampleName = reaction.name+"-"+reaction.primer;
         } else if (isDefunct) {
           sampleName = 'Defunct';
         } else if (isCC) {
