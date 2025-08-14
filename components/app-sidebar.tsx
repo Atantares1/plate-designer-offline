@@ -5,18 +5,13 @@ import { GripVertical, Check, ArrowDownNarrowWide } from "lucide-react"
 import { useDraggable } from "@dnd-kit/core"
 import { cn } from "@/lib/utils"
 import { Button } from "./ui/button"
+import { useReactionsStore } from "@/store/data"
+import { Reaction } from "@/app/type"
+import { ReactionListMenu } from "./reaction-list-menu"
 
 type SortMethod = 'sample' | 'primer';
 
-interface Reaction {
-  id: string
-  name: string
-  primer: string
-  state: string // either "unused" or a well position like "A1", "B3", etc.
-}
-
 interface AppSidebarProps {
-  reactions: Reaction[];
   selectedItems: Set<string>;
   selectedOrder: string[]; // New prop for selection order
   usedItems: Set<string>;
@@ -103,7 +98,6 @@ function DraggableItem({ reaction, isSelected, selectedItems, selectedOrder, onC
 }
 
 export function AppSidebar({ 
-  reactions, 
   selectedItems, 
   selectedOrder, 
   usedItems, 
@@ -114,19 +108,52 @@ export function AppSidebar({
   activePlateName, 
 }: AppSidebarProps) {
   const [sortMethod, setSortMethod] = React.useState<SortMethod>('sample');
+  const {
+    getActiveReactionList
+  } = useReactionsStore();
 
-  // Sort reactions based on current method
+  const activeList = getActiveReactionList();
+  const activeReactions = activeList?.reactions || [];
+
+  // Sort reactions based on current method and list-specific order
   const sortedReactions = React.useMemo(() => {
+    if (!activeList) return [];
+    
+    let reactionsToSort = [...activeReactions];
+    
     if (sortMethod === 'sample') {
+      // Use list-specific order if available, otherwise default order
+      if (activeList.order.length > 0) {
+        // Sort by the custom order, keeping reactions not in order at the end
+        const orderedReactions: Reaction[] = [];
+        const unorderedReactions: Reaction[] = [];
+        
+        // First add reactions in the specified order
+        activeList.order.forEach(reactionId => {
+          const reaction = reactionsToSort.find(r => r.id === reactionId);
+          if (reaction) {
+            orderedReactions.push(reaction);
+          }
+        });
+        
+        // Then add reactions not in the order
+        reactionsToSort.forEach(reaction => {
+          if (!activeList.order.includes(reaction.id)) {
+            unorderedReactions.push(reaction);
+          }
+        });
+        
+        return [...orderedReactions, ...unorderedReactions];
+      }
       // Default order - return as is (stable sort)
-      return [...reactions];
+      return reactionsToSort;
     } else if (sortMethod === 'primer') {
       // Group by primer, maintaining stable order (first appearance of each primer)
       const primerGroups = new Map<string, Reaction[]>();
       const primerOrder: string[] = [];
       
       // Group reactions by primer and track order of first appearance
-      reactions.forEach(reaction => {
+      reactionsToSort.forEach(reaction => {
         const primer = reaction.primer;
         if (!primerGroups.has(primer)) {
           primerGroups.set(primer, []);
@@ -146,20 +173,25 @@ export function AppSidebar({
       return sortedReactions;
     }
     
-    return reactions;
-  }, [reactions, sortMethod]);
+    return reactionsToSort;
+  }, [activeList, activeReactions, sortMethod]);
 
   // Filter to only show unused reactions
   const unusedReactions = sortedReactions.filter(r => !usedItems.has(r.id));
 
+
+
   return (
     <div className="h-full">
-      <div className="text-xs text-muted-foreground  p-4 border-b">
+      {/* Current List Info */}
+      
+      <div className="text-xs text-muted-foreground p-4 border-b">
+      <ReactionListMenu />
         <div className="text-xl text-blue-900 mb-1">
           {activePlateName || 'Global Reactions'}
         </div>
         <div className="flex items-center justify-between">
-          <div>可用: {unusedReactions.length}/{reactions.length} 条反应🧪</div>
+          <div>可用: {unusedReactions.length}/{activeReactions.length} 条反应🧪</div>
         </div>
         <div className="flex gap-2 pt-2">
           <Button 
@@ -186,6 +218,8 @@ export function AppSidebar({
           </Button>
         </div>
       </div>
+
+      {/* Reactions List */}
       <div className="flex-1 overflow-auto p-2">
         <div className="space-y-0">
           {unusedReactions.map((reaction, index) => {

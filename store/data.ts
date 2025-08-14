@@ -9,10 +9,17 @@ interface Plate {
   isActive: boolean;
 }
 
-
+// Reaction list interface
+interface ReactionList {
+  id: string;
+  name: string;
+  isActive: boolean;
+  reactions: Reaction[];
+  order: string[]; // Custom ordering for this list
+}
 
 interface ReactionsState {
-  reactions: Reaction[];
+  reactionLists: ReactionList[];
   plates: Plate[];
   selectedItems: Set<string>;
   selectedOrder: string[];
@@ -22,11 +29,24 @@ interface ReactionsState {
   previewWells: Set<string>;
   isMultiDrag: boolean;
   
-  setReactions: (reactions: Reaction[]) => void;
+  // Reaction list management
+  addReactionList: (name?: string) => void;
+  removeReactionList: (listId: string) => void;
+  setActiveReactionList: (listId: string) => void;
+  getActiveReactionList: () => ReactionList | undefined;
+  renameReactionList: (listId: string, newName: string) => boolean;
+  
+  // Reaction management within lists
+  setReactions: (reactions: Reaction[], listId?: string) => void;
+  addReactionsToList: (reactions: Reaction[], listId?: string) => void;
   updateReaction: (id: string, updates: Partial<Reaction>) => void;
   moveReaction: (id: string, newState: string) => void;
   swapReactions: (id1: string, id2: string) => void;
   moveReactionToPlate: (reactionId: string, plateId: string) => void;
+  
+  // List-specific ordering
+  setListOrder: (listId: string, order: string[]) => void;
+  reorderReactionInList: (listId: string, reactionId: string, newIndex: number) => void;
   
   addPlate: () => void;
   renamePlate: (plateId: string, newName: string) => void;
@@ -58,12 +78,27 @@ interface ReactionsState {
   getReactionAtPosition: (position: string, plateId?: string) => Reaction | undefined;
   getUsedItems: (plateId?: string) => Set<string>;
   getReactionsForPlate: (plateId: string) => Reaction[];
+  
+  // Get all reactions from all lists
+  getAllReactions: () => Reaction[];
+  
+     // Get reactions from a specific list
+   getReactionsFromList: (listId: string) => Reaction[];
+   
+   // Get a specific reaction list by ID
+   getReactionListById: (listId: string) => ReactionList | undefined;
 }
 
 export const useReactionsStore = create<ReactionsState>()(
   persist(
     (set, get) => ({
-      reactions: [],
+             reactionLists: [{
+         id: '1',
+         name: '1',
+         isActive: true,
+         reactions: [],
+         order: []
+       }],
       plates: [{
         id: '1',
         name: 'Plate 1',
@@ -77,13 +112,209 @@ export const useReactionsStore = create<ReactionsState>()(
       previewWells: new Set(),
       isMultiDrag: false,
 
-      // Actions
-      setReactions: (reactions) => set({ reactions }),
+      // Reaction list management
+                   addReactionList: (name) => set((state) => {
+        // Find the next available number by checking existing names
+        const existingNumbers = state.reactionLists
+          .map(list => {
+            const match = list.name.match(/^(\d+)$/);
+            return match ? parseInt(match[1]) : 0;
+          })
+          .filter(num => num > 0)
+          .sort((a, b) => a - b);
+        
+        let nextNumber = 1;
+        for (const num of existingNumbers) {
+          if (num === nextNumber) {
+            nextNumber++;
+          } else {
+            break; // Found a gap, use this number
+          }
+        }
+        
+        // Find the next available ID by checking existing IDs
+        const existingIds = state.reactionLists
+          .map(list => parseInt(list.id))
+          .filter(num => !isNaN(num))
+          .sort((a, b) => a - b);
+        
+        let nextId = 1;
+        for (const id of existingIds) {
+          if (id === nextId) {
+            nextId++;
+          } else {
+            break; // Found a gap, use this ID
+          }
+        }
+        
+        const newName = name || nextNumber.toString();
+        
+        const newList: ReactionList = {
+          id: nextId.toString(),
+          name: newName,
+          isActive: false,
+          reactions: [],
+          order: []
+        };
+        
+        // Set the new list as active and deactivate others
+        const updatedLists = state.reactionLists.map(list => ({ ...list, isActive: false }));
+        updatedLists.push(newList);
+        
+        return { reactionLists: updatedLists };
+      }),
+
+      removeReactionList: (listId) => set((state) => {
+        if (state.reactionLists.length <= 1) return state; // Don't delete if it's the only list
+        
+        const updatedLists = state.reactionLists.filter(list => list.id !== listId);
+        
+        // If we deleted the active list, make the first remaining list active
+        const wasActive = state.reactionLists.find(list => list.id === listId)?.isActive;
+        if (wasActive && updatedLists.length > 0) {
+          updatedLists[0].isActive = true;
+        }
+        
+        return { reactionLists: updatedLists };
+      }),
+
+      setActiveReactionList: (listId) => set((state) => ({
+        reactionLists: state.reactionLists.map(list => ({
+          ...list,
+          isActive: list.id === listId
+        }))
+      })),
+
+      getActiveReactionList: () => {
+        const state = get();
+        const activeList = state.reactionLists.find(list => list.isActive);
+        if (activeList) return activeList;
+        if (state.reactionLists.length > 0) return state.reactionLists[0];
+        
+         const defaultList = {
+           id: '1',
+           name: '1',
+           isActive: true,
+           reactions: [],
+           order: []
+         };
+        set({ reactionLists: [defaultList] });
+        return defaultList;
+      },
+
+                   renameReactionList: (listId, newName) => {
+        const state = get();
+        
+        const nameExists = state.reactionLists.some(list => 
+          list.id !== listId && list.name === newName
+        );
+        
+        if (nameExists) {
+          return false;
+        }
+        
+        set((state) => ({
+          reactionLists: state.reactionLists.map(list =>
+            list.id === listId ? { ...list, name: newName } : list
+          )
+        }));
+        
+        return true; 
+      },
+
+
+      setListOrder: (listId, order) => set((state) => ({
+        reactionLists: state.reactionLists.map(list =>
+          list.id === listId ? { ...list, order } : list
+        )
+      })),
+
+      reorderReactionInList: (listId, reactionId, newIndex) => set((state) => {
+        const list = state.reactionLists.find(l => l.id === listId);
+        if (!list) return state;
+        
+        const currentOrder = [...list.order];
+        const currentIndex = currentOrder.indexOf(reactionId);
+        
+        if (currentIndex === -1) return state;
+        
+        // Remove from current position and insert at new position
+        currentOrder.splice(currentIndex, 1);
+        currentOrder.splice(newIndex, 0, reactionId);
+        
+        return {
+          reactionLists: state.reactionLists.map(l =>
+            l.id === listId ? { ...l, order: currentOrder } : l
+          )
+        };
+      }),
+
+      setReactions: (reactions, listId) => set((state) => {
+        const targetListId = listId || state.reactionLists.find(list => list.isActive)?.id || '1';
+        
+        const allReactions = state.reactionLists.flatMap(list => list.reactions);
+        const duplicateSamples = new Map<string, string[]>();
+        
+        reactions.forEach(reaction => {
+          if (reaction.name) {
+            const existingReactions = allReactions.filter(r => 
+              r.name === reaction.name && r.id !== reaction.id
+            );
+            if (existingReactions.length > 0) {
+              const listNames = existingReactions.map(r => {
+                const list = state.reactionLists.find(l => l.reactions.some(r2 => r2.id === r.id));
+                return list?.name || 'Unknown';
+              });
+              duplicateSamples.set(reaction.name, listNames);
+            }
+          }
+        });
+        
+        if (duplicateSamples.size > 0) {
+          const errorDetails = Array.from(duplicateSamples.entries())
+            .map(([sampleName, listNames]) => 
+              `Sample "${sampleName}" already exists!!`
+            )
+            .join('\n');
+          throw new Error(`Duplicate sample names detected:\n${errorDetails}`);
+        }
+        
+        return {
+          reactionLists: state.reactionLists.map(list =>
+            list.id === targetListId 
+              ? { 
+                  ...list, 
+                  reactions, 
+                  order: reactions.map(r => r.id) 
+                }
+              : list
+          )
+        };
+      }),
+
+      addReactionsToList: (reactions, listId) => set((state) => {
+        const targetListId = listId || state.reactionLists.find(list => list.isActive)?.id || '1';
+        
+        return {
+          reactionLists: state.reactionLists.map(list =>
+            list.id === targetListId 
+              ? { 
+                  ...list, 
+                  reactions: [...list.reactions, ...reactions],
+                  order: [...list.order, ...reactions.map(r => r.id)]
+                }
+              : list
+          )
+        };
+      }),
       
       updateReaction: (id, updates) => set((state) => ({
-        reactions: state.reactions.map(reaction =>
-          reaction.id === id ? { ...reaction, ...updates } : reaction
-        )
+        reactionLists: state.reactionLists.map(list => ({
+          ...list,
+          reactions: list.reactions.map(reaction =>
+            reaction.id === id ? { ...reaction, ...updates } : reaction
+          )
+        }))
       })),
       
       moveReaction: (id, newState) => set((state) => {
@@ -93,10 +324,8 @@ export const useReactionsStore = create<ReactionsState>()(
         if (newState === 'unused') {
           plateId = undefined;
         } else {
-          // If no active plate, use the first plate as default
           plateId = activePlate?.id || state.plates[0]?.id;
           
-          // If still no plateId, create a default plate
           if (!plateId) {
             const defaultPlate = {
               id: '1',
@@ -109,53 +338,83 @@ export const useReactionsStore = create<ReactionsState>()(
         }
         
         return {
-          reactions: state.reactions.map(reaction =>
-            reaction.id === id ? { ...reaction, state: newState, plateId } : reaction
-          )
+          reactionLists: state.reactionLists.map(list => ({
+            ...list,
+            reactions: list.reactions.map(reaction =>
+              reaction.id === id ? { ...reaction, state: newState, plateId } : reaction
+            )
+          }))
         };
       }),
       
       swapReactions: (id1, id2) => set((state) => {
-        const reaction1 = state.reactions.find(r => r.id === id1);
-        const reaction2 = state.reactions.find(r => r.id === id2);
+        const reaction1 = state.reactionLists.flatMap(list => list.reactions).find(r => r.id === id1);
+        const reaction2 = state.reactionLists.flatMap(list => list.reactions).find(r => r.id === id2);
         
         if (!reaction1 || !reaction2) return state;
         
         return {
-          reactions: state.reactions.map(reaction => {
-            if (reaction.id === id1) {
-              return { ...reaction, state: reaction2.state, plateId: reaction2.plateId };
-            } else if (reaction.id === id2) {
-              return { ...reaction, state: reaction1.state, plateId: reaction1.plateId };
-            }
-            return reaction;
-          })
+          reactionLists: state.reactionLists.map(list => ({
+            ...list,
+            reactions: list.reactions.map(reaction => {
+              if (reaction.id === id1) {
+                return { ...reaction, state: reaction2.state, plateId: reaction2.plateId };
+              } else if (reaction.id === id2) {
+                return { ...reaction, state: reaction1.state, plateId: reaction1.plateId };
+              }
+              return reaction;
+            })
+          }))
         };
       }),
 
       moveReactionToPlate: (reactionId, plateId) => set((state) => ({
-        reactions: state.reactions.map(reaction =>
-          reaction.id === reactionId ? { ...reaction, plateId } : reaction
-        )
+        reactionLists: state.reactionLists.map(list => ({
+          ...list,
+          reactions: list.reactions.map(reaction =>
+            reaction.id === reactionId ? { ...reaction, plateId } : reaction
+          )
+        }))
       })),
 
       // Plate management
-      addPlate: () => set((state) => {
-        // Find the next available ID by checking existing plate IDs
-        const existingIds = state.plates.map(plate => parseInt(plate.id)).sort((a, b) => a - b);
-        let nextId = 1;
+                   addPlate: () => set((state) => {
+        // Find the next available number by checking existing names
+        const existingNumbers = state.plates
+          .map(plate => {
+            const match = plate.name.match(/Plate (\d+)/);
+            return match ? parseInt(match[1]) : 0;
+          })
+          .filter(num => num > 0)
+          .sort((a, b) => a - b);
         
-        // Find the first gap in the sequence or use the next number after the highest
-        for (const id of existingIds) {
-          if (id !== nextId) {
+        let nextNumber = 1;
+        for (const num of existingNumbers) {
+          if (num === nextNumber) {
+            nextNumber++;
+          } else {
             break; // Found a gap, use this number
           }
-          nextId++;
+        }
+        
+        // Find the next available ID by checking existing IDs
+        const existingIds = state.plates
+          .map(plate => parseInt(plate.id))
+          .filter(num => !isNaN(num))
+          .sort((a, b) => a - b);
+        
+        let nextId = 1;
+        for (const id of existingIds) {
+          if (id === nextId) {
+            nextId++;
+          } else {
+            break; // Found a gap, use this ID
+          }
         }
         
         const newPlate: Plate = {
           id: nextId.toString(),
-          name: `Plate ${nextId}`,
+          name: `Plate ${nextNumber}`,
           isActive: false
         };
         
@@ -171,11 +430,41 @@ export const useReactionsStore = create<ReactionsState>()(
         return { plates: updatedPlates };
       }),
 
-      renamePlate: (plateId, newName) => set((state) => ({
-        plates: state.plates.map(plate =>
-          plate.id === plateId ? { ...plate, name: newName } : plate
-        )
-      })),
+             renamePlate: (plateId, newName) => set((state) => {
+         // Check if the new name already exists (excluding the current plate)
+         const nameExists = state.plates.some(plate => 
+           plate.id !== plateId && plate.name === newName
+         );
+         
+         if (nameExists) {
+           // Find the next available number for this name
+           const existingNumbers = state.plates
+             .filter(plate => plate.id !== plateId)
+             .map(plate => {
+               const match = plate.name.match(new RegExp(`^${newName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?: (\\d+))?$`));
+               return match ? (match[1] ? parseInt(match[1]) : 1) : 0;
+             })
+             .filter(num => num > 0)
+             .sort((a, b) => a - b);
+           
+           let nextNumber = 1;
+           for (const num of existingNumbers) {
+             if (num === nextNumber) {
+               nextNumber++;
+             } else {
+               break; // Found a gap, use this number
+             }
+           }
+           
+           newName = `${newName} ${nextNumber}`;
+         }
+         
+         return {
+           plates: state.plates.map(plate =>
+             plate.id === plateId ? { ...plate, name: newName } : plate
+           )
+         };
+       }),
 
       deletePlate: (plateId) => set((state) => {
         // Don't delete if it's the only plate
@@ -190,12 +479,15 @@ export const useReactionsStore = create<ReactionsState>()(
         }
         
         // Free all reactions from deleted plate (set plateId to undefined AND state to 'unused')
-        const updatedReactions = state.reactions.map(reaction => {
-          if (reaction.plateId === plateId) {
-            return { ...reaction, plateId: undefined, state: 'unused' };
-          }
-          return reaction;
-        });
+        const updatedReactionLists = state.reactionLists.map(list => ({
+          ...list,
+          reactions: list.reactions.map(reaction => {
+            if (reaction.plateId === plateId) {
+              return { ...reaction, plateId: undefined, state: 'unused' };
+            }
+            return reaction;
+          })
+        }));
         
         // Remove defunct wells for the deleted plate
         const newDefunctWells = new Map(state.defunctWells);
@@ -203,7 +495,7 @@ export const useReactionsStore = create<ReactionsState>()(
         
         return { 
           plates: updatedPlates,
-          reactions: updatedReactions,
+          reactionLists: updatedReactionLists,
           defunctWells: newDefunctWells
         };
       }),
@@ -272,7 +564,7 @@ export const useReactionsStore = create<ReactionsState>()(
       selectRange: (startIndex, endIndex) => set((state) => {
         const start = Math.min(startIndex, endIndex);
         const end = Math.max(startIndex, endIndex);
-        const rangeIds = state.reactions.slice(start, end + 1).map(r => r.id);
+        const rangeIds = state.reactionLists.flatMap(list => list.reactions).slice(start, end + 1).map(r => r.id);
         
         return {
           selectedItems: new Set(rangeIds),
@@ -336,15 +628,21 @@ export const useReactionsStore = create<ReactionsState>()(
 
       // Utility actions
       resetToDefault: () => set((state) => {
-        const defaultPlates = [{
-          id: '1',
-          name: 'Plate 1',
-          isActive: true
-        }];
+                 const defaultLists = [{
+           id: '1',
+           name: '1',
+           isActive: true,
+           reactions: [],
+           order: []
+         }];
         
         return {
-          reactions: [],
-          plates: defaultPlates,
+          reactionLists: defaultLists,
+          plates: [{
+            id: '1',
+            name: 'Plate 1',
+            isActive: true
+          }],
           selectedItems: new Set(),
           selectedOrder: [],
           lastSelectedIndex: -1,
@@ -355,12 +653,12 @@ export const useReactionsStore = create<ReactionsState>()(
         };
       }),
       
-      getReactionById: (id) => get().reactions.find(r => r.id === id),
+      getReactionById: (id) => get().reactionLists.flatMap(list => list.reactions).find(r => r.id === id),
       
       getReactionAtPosition: (position, plateId?: string) => {
         const state = get();
         if (plateId) {
-          return state.reactions.find(r => r.state === position && r.plateId === plateId);
+          return state.reactionLists.flatMap(list => list.reactions).find(r => r.state === position && r.plateId === plateId);
         }
         // If no plateId provided, get the active plate or default to first plate
         const activePlate = state.plates.find(plate => plate.isActive);
@@ -377,23 +675,43 @@ export const useReactionsStore = create<ReactionsState>()(
           targetPlateId = defaultPlate.id;
         }
         
-        return state.reactions.find(r => r.state === position && r.plateId === targetPlateId);
+        return state.reactionLists.flatMap(list => list.reactions).find(r => r.state === position && r.plateId === targetPlateId);
       },
       
       getUsedItems: (plateId?: string) => {
         const state = get();
         if (plateId) {
-          return new Set(state.reactions.filter(r => r.state !== 'unused' && r.plateId === plateId).map(r => r.id));
+          return new Set(state.reactionLists.flatMap(list => list.reactions).filter(r => r.state !== 'unused' && r.plateId === plateId).map(r => r.id));
         }
-        return new Set(state.reactions.filter(r => r.state !== 'unused' && r.plateId !== undefined).map(r => r.id));
+        return new Set(state.reactionLists.flatMap(list => list.reactions).filter(r => r.state !== 'unused' && r.plateId !== undefined).map(r => r.id));
       },
 
-      getReactionsForPlate: (plateId) => get().reactions.filter(r => r.plateId === plateId)
+      getReactionsForPlate: (plateId) => get().reactionLists.flatMap(list => list.reactions).filter(r => r.plateId === plateId),
+
+      // Get all reactions from all lists
+      getAllReactions: () => get().reactionLists.flatMap(list => list.reactions),
+      
+         // Get reactions from a specific list
+   getReactionsFromList: (listId: string) => {
+     const state = get();
+     const list = state.reactionLists.find(l => l.id === listId);
+     return list ? list.reactions : [];
+   },
+   
+   // Get a specific reaction list by ID
+   getReactionListById: (listId: string) => {
+     const state = get();
+     return state.reactionLists.find(l => l.id === listId);
+   }
     }),
     {
       name: 'reactions-storage',
       partialize: (state) => ({
-        reactions: state.reactions,
+        reactionLists: state.reactionLists.map(list => ({
+          ...list,
+          reactions: Array.from(list.reactions),
+          order: Array.from(list.order)
+        })),
         plates: state.plates,
         selectedItems: Array.from(state.selectedItems),
         selectedOrder: state.selectedOrder,
@@ -428,6 +746,15 @@ export const useReactionsStore = create<ReactionsState>()(
             state.ccWells = new Map();
           }
           state.previewWells = new Set(state.previewWells || []);
+
+          // Convert reactionLists back to their original structure
+          if (state.reactionLists && Array.isArray(state.reactionLists)) {
+            state.reactionLists = state.reactionLists.map(list => ({
+              ...list,
+              reactions: Array.from(list.reactions),
+              order: Array.from(list.order)
+            }));
+          }
         }
       }
     }

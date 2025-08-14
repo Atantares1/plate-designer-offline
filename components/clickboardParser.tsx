@@ -11,7 +11,7 @@ interface ClipboardParserProps {
 }
 
 export default function ClipboardParser({ onParseSuccess, onParseError }: ClipboardParserProps) {
-  const { setReactions, clearSelection } = useReactionsStore()
+  const { setReactions, clearSelection, getActiveReactionList } = useReactionsStore()
   const idCounterRef = useRef(1)
 
   useEffect(() => {
@@ -27,7 +27,12 @@ export default function ClipboardParser({ onParseSuccess, onParseError }: Clipbo
             return
           }
 
-         
+          // Get the active reaction list
+          const activeList = getActiveReactionList()
+          if (!activeList) {
+            toast.error("No active reaction list found")
+            return
+          }
 
           // Parse TSV data
           const rows = clipboardText.trim().split("\n")
@@ -119,19 +124,19 @@ export default function ClipboardParser({ onParseSuccess, onParseError }: Clipbo
           console.log("Parsed reactions:", parsedReactions)
 
           if (parsedReactions.length > 0) {
-            // Clear current selection and update reactions in store
+            // Clear current selection and update reactions in the ACTIVE list only
             clearSelection()
-            setReactions(parsedReactions)
+            setReactions(parsedReactions, activeList.id) // Pass the active list ID
             
             // Show success toast with more details
-            toast.success(`成功读取 ${parsedReactions.length} 条反应🧪!`, {
+            toast.success(`成功读取 ${parsedReactions.length} 条反应到 ${activeList.name} 🧪!`, {
               duration: 2000,
             })
             
             // Call success callback
             onParseSuccess?.(parsedReactions.length)
             
-            console.log(`Successfully updated reaction list with ${parsedReactions.length} reactions`)
+            console.log(`Successfully updated reaction list "${activeList.name}" with ${parsedReactions.length} reactions`)
           } else {
             const errorMsg = "Clipboard 中没有找到合规数据"
             console.warn(errorMsg)
@@ -160,7 +165,7 @@ export default function ClipboardParser({ onParseSuccess, onParseError }: Clipbo
     return () => {
       document.removeEventListener("keydown", handleKeyDown)
     }
-  }, [setReactions, clearSelection, onParseSuccess, onParseError])
+  }, [setReactions, clearSelection, onParseSuccess, onParseError, getActiveReactionList])
 
   // This component is invisible - it doesn't render anything
   return null

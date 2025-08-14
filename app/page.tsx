@@ -6,6 +6,7 @@ import { Sidebar, SidebarContent, SidebarHeader, SidebarTrigger } from '@/compon
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { AppSidebar } from '@/components/app-sidebar';
 import { PlateMenu } from '@/components/plate-menu';
+import { ReactionListMenu } from '@/components/reaction-list-menu';
 import { Reaction, Well } from './type';
 import { useReactionsStore } from '@/store/data';
 import ClipboardParser from '@/components/clickboardParser';
@@ -20,36 +21,36 @@ const WellGrid = dynamic(() => import('../components/well-grid').then(mod => ({ 
 
 export default function Home() {
   // Use Zustand store instead of local state
-  const {
-    reactions,
-    plates,
-    selectedItems,
-    selectedOrder,
-    lastSelectedIndex,
-    previewWells,
-    isMultiDrag,
-    setSelectedItems,
-    setSelectedOrder,
-    setLastSelectedIndex,
-    setPreviewWells,
-    setIsMultiDrag,
-    clearSelection,
-    getReactionById,
-    getReactionAtPosition,
-    getUsedItems,
-    moveReaction,
-    swapReactions,
-    toggleDefunctWell,
-    toggleCCWell,
-    getActivePlate,
-    getReactionsForPlate,
-    getDefunctWellsForPlate,
-    getCCWellsForPlate
-  } = useReactionsStore();
+     const {
+     reactionLists,
+     plates,
+     selectedItems,
+     selectedOrder,
+     lastSelectedIndex,
+     previewWells,
+     setSelectedItems,
+     setSelectedOrder,
+     setLastSelectedIndex,
+     setPreviewWells,
+     clearSelection,
+     getReactionById,
+     getReactionAtPosition,
+     getUsedItems,
+     moveReaction,
+     swapReactions,
+     toggleDefunctWell,
+     toggleCCWell,
+     getActivePlate,
+     getReactionsForPlate,
+     getDefunctWellsForPlate,
+     getCCWellsForPlate,
+     getAllReactions
+   } = useReactionsStore();
 
   const [activeExperiment, setActiveExperiment] = useState<Reaction | null>(null);
   const [pickedUpReaction, setPickedUpReaction] = useState<{ reaction: Reaction; from: string } | null>(null);
   const [isClient, setIsClient] = useState(false);
+
 
   useEffect(() => {
     setIsClient(true);
@@ -64,7 +65,7 @@ export default function Home() {
     }
   }, [isClient, plates.length]);
 
-  // Helper function to calculate preview wells for multi-drag
+  // Helper function to calculate preview wells for both single and multiple reactions
   const calculatePreviewWells = (targetPosition: string, selectedItems: string[]) => {
     const previewPositions = new Set<string>();
     const availableItems = selectedItems.filter((id: string) => {
@@ -84,26 +85,37 @@ export default function Home() {
     let currentCol = col.charCodeAt(0) - 65;
     let currentRow = row - 1;
 
-    availableItems.forEach((itemId: string) => {
-      // Skip defunct wells, CC wells, and occupied wells
-      while (currentCol < 8 && currentRow < 12) {
-        const position = `${String.fromCharCode(65 + currentCol)}${(currentRow + 1).toString().padStart(2, '0')}`;
+    // For each item, find the first available well starting from the target position
+    availableItems.forEach((itemId: string, index: number) => {
+      let found = false;
+      let searchCol = currentCol;
+      let searchRow = currentRow;
+      
+      // Search for available well
+      while (searchCol < 8 && searchRow < 12 && !found) {
+        const position = `${String.fromCharCode(65 + searchCol)}${(searchRow + 1).toString().padStart(2, '0')}`;
+        
+        // Check if this well is available
         if (!defunctWells.has(position) && !ccWells.has(position) && !getReactionAtPosition(position, activePlate?.id)) {
+          // Found an available well - add it to preview
           previewPositions.add(position);
-          break;
+          found = true;
+          
+          // Update current position for next item
+          currentCol = searchCol + 1;
+          currentRow = searchRow;
+          if (currentCol >= 8) {
+            currentCol = 0;
+            currentRow++;
+          }
+        } else {
+          // Move to next well
+          searchCol++;
+          if (searchCol >= 8) {
+            searchCol = 0;
+            searchRow++;
+          }
         }
-        currentCol++;
-        if (currentCol >= 8) {
-          currentCol = 0;
-          currentRow++;
-        }
-      }
-
-      // Move to next position horizontally
-      currentCol++;
-      if (currentCol >= 8) {
-        currentCol = 0;
-        currentRow++;
       }
     });
 
@@ -146,6 +158,15 @@ export default function Home() {
     event.preventDefault();
     event.stopPropagation();
 
+    // Check if this reaction belongs to the active list
+    const { getActiveReactionList } = useReactionsStore.getState();
+    const activeList = getActiveReactionList();
+    
+    if (!activeList || !activeList.reactions.some(r => r.id === reactionId)) {
+      // Reaction doesn't belong to active list, don't allow selection
+      return;
+    }
+
     if (event.ctrlKey || event.metaKey) {
       // Ctrl+click for multi-selection
       const newSelectedItems = new Set(selectedItems);
@@ -162,9 +183,9 @@ export default function Home() {
       setSelectedOrder(newSelectedOrder);
     } else if (event.shiftKey && lastSelectedIndex !== -1) {
       // Shift+click for range selection - use sorted reactions if available
-      const reactionsToUse = sortedReactions || reactions.filter(r => r.state === 'unused');
+      const reactionsToUse = sortedReactions || getAllReactions().filter(r => r.state === 'unused');
       const currentReactionIndex = currentIndex !== undefined ? currentIndex : reactionsToUse.findIndex(r => r.id === reactionId);
-      const lastSelectedReaction = reactions[lastSelectedIndex];
+      const lastSelectedReaction = getAllReactions()[lastSelectedIndex];
       const lastSelectedReactionIndex = reactionsToUse.findIndex(r => r.id === lastSelectedReaction?.id);
       
       if (currentReactionIndex !== -1 && lastSelectedReactionIndex !== -1) {
@@ -181,43 +202,61 @@ export default function Home() {
       setSelectedOrder([reactionId]);
     }
     
-    setLastSelectedIndex(reactions.findIndex(r => r.id === reactionId));
+    setLastSelectedIndex(getAllReactions().findIndex(r => r.id === reactionId));
   };
 
 
 
-  // Handler for drag start
-  const handleDragStart = (event: DragStartEvent) => {
-    const { active } = event;
-    const reaction = getReactionById(active.id as string);
-    
-    if (reaction) {
-      setActiveExperiment(reaction);
-      
-      // Check if this is a multi-drag
-      const activeData = active.data.current;
-      if (activeData?.isMultiDrag && activeData?.selectedItems) {
-        setIsMultiDrag(true);
-      } else {
-        setIsMultiDrag(false);
-      }
-    }
-  };
+     // Handler for drag start
+   const handleDragStart = (event: DragStartEvent) => {
+     const { active } = event;
+     const reaction = getReactionById(active.id as string);
+     
+     if (reaction) {
+       // Check if this reaction belongs to the active list
+       const { getActiveReactionList } = useReactionsStore.getState();
+       const activeList = getActiveReactionList();
+       
+       if (!activeList || !activeList.reactions.some(r => r.id === reaction.id)) {
+         // Reaction doesn't belong to active list, don't allow drag
+         return;
+       }
+       
+       setActiveExperiment(reaction);
+     }
+   };
 
-  // Handler for drag over
-  const handleDragOver = (event: DragOverEvent) => {
-    const { active, over } = event;
-    
-    if (over && active && isMultiDrag) {
-      const activeData = active.data.current;
-      if (activeData?.selectedItems) {
-        const previewPositions = calculatePreviewWells(over.id as string, activeData.selectedItems);
-        setPreviewWells(previewPositions);
-      }
-    } else {
-      setPreviewWells(new Set());
-    }
-  };
+     // Handler for drag over
+   const handleDragOver = (event: DragOverEvent) => {
+     const { active, over } = event;
+     
+     if (over && active) {
+       const activeData = active.data.current;
+       
+       // For single reactions, we need to check if they're actually available for placement
+       let itemsToPreview: string[] = [];
+       
+       if (activeData?.selectedItems && activeData.selectedItems.length > 0) {
+         // Multiple selected items
+         itemsToPreview = activeData.selectedItems;
+       } else {
+         // Single reaction - check if it's available for placement
+         const reaction = getReactionById(active.id as string);
+         if (reaction && reaction.state === 'unused') {
+           itemsToPreview = [active.id as string];
+         }
+       }
+       
+       if (itemsToPreview.length > 0) {
+         const previewPositions = calculatePreviewWells(over.id as string, itemsToPreview);
+         setPreviewWells(previewPositions);
+       } else {
+         setPreviewWells(new Set());
+       }
+     } else {
+       setPreviewWells(new Set());
+     }
+   };
 
   // Handler for drag end
   const handleDragEnd = (event: DragEndEvent) => {
@@ -228,90 +267,94 @@ export default function Home() {
       const reaction = getReactionById(active.id as string);
       
       if (reaction) {
-        // Check if this is a multi-item drag from sidebar
-        const activeData = active.data.current;
-        if (activeData?.isMultiDrag && activeData?.selectedItems) {
-          // Handle multiple items - fill horizontally
-          const availableItems = activeData.selectedItems.filter((id: string) => {
-            const r = getReactionById(id);
-            return r && r.state === 'unused';
-          });
-          
-          if (availableItems.length > 0) {
-            const activePlate = getActivePlate();
-            const activeDefunctWells = activePlate ? getDefunctWellsForPlate(activePlate.id) : new Set();
-            const activeCCWells = activePlate ? getCCWellsForPlate(activePlate.id) : new Set();
-            
-            // Parse starting position
-            const col = targetPosition.charAt(0);
-            const row = parseInt(targetPosition.slice(1));
-            let currentCol = col.charCodeAt(0) - 65;
-            let currentRow = row - 1;
-            
-            const placedItems: string[] = [];
-            
-            availableItems.forEach((itemId: string) => {
-              // Skip defunct wells, CC wells, and occupied wells
-              while (currentCol < 8 && currentRow < 12) {
-                const position = `${String.fromCharCode(65 + currentCol)}${(currentRow + 1).toString().padStart(2, '0')}`;
-                if (!activeDefunctWells.has(position) && !activeCCWells.has(position) && !getReactionAtPosition(position, activePlate?.id)) {
-                  break;
-                }
-                currentCol++;
-                if (currentCol >= 8) {
-                  currentCol = 0;
-                  currentRow++;
-                }
-              }
-              
-              if (currentCol < 8 && currentRow < 12) {
-                const position = `${String.fromCharCode(65 + currentCol)}${(currentRow + 1).toString().padStart(2, '0')}`;
-                moveReaction(itemId, position);
-                placedItems.push(itemId);
-                
-                // Move to next position horizontally
-                currentCol++;
-                if (currentCol >= 8) {
-                  currentCol = 0;
-                  currentRow++;
-                }
-              }
-            });
-            
-            // Clear selection after successful placement
-            if (placedItems.length > 0) {
-              setSelectedItems(new Set());
-              setSelectedOrder([]);
-            }
-          }
-        } else {
-          // Single item drop
-          const activePlate = getActivePlate();
-          const activeDefunctWells = activePlate ? getDefunctWellsForPlate(activePlate.id) : new Set();
-          const activeCCWells = activePlate ? getCCWellsForPlate(activePlate.id) : new Set();
-          
-          // Check if target is defunct or CC well
-          if (activeDefunctWells.has(targetPosition) || activeCCWells.has(targetPosition)) {
-            // Don't allow drops on defunct or CC wells
-            return;
-          }
-          
-          const existingReaction = getReactionAtPosition(targetPosition, activePlate?.id);
-          
-          if (existingReaction) {
-            // Target is occupied - swap reactions
-            swapReactions(reaction.id, existingReaction.id);
-          } else {
-            // Target is empty - move reaction
-            moveReaction(reaction.id, targetPosition);
-          }
+        // Check if this reaction belongs to the active list
+        const { getActiveReactionList } = useReactionsStore.getState();
+        const activeList = getActiveReactionList();
+        
+        if (!activeList || !activeList.reactions.some(r => r.id === reaction.id)) {
+          return;
         }
+        
+         const activeData = active.data.current;
+         let itemsToPlace: string[] = [];
+         
+         if (activeData?.selectedItems && activeData.selectedItems.length > 0) {
+           // Multiple selected items - check if they all belong to active list
+           if (!activeData.selectedItems.every((id: string) => 
+             activeList.reactions.some(r => r.id === id)
+           )) {
+             return; // Some items don't belong to active list
+           }
+           itemsToPlace = activeData.selectedItems;
+         } else {
+           // Single reaction - check if it belongs to active list and is available
+           if (!activeList.reactions.some(r => r.id === reaction.id)) {
+             return; // Reaction doesn't belong to active list
+           }
+           if (reaction.state !== 'unused') {
+             return; // Reaction is not available for placement
+           }
+           itemsToPlace = [reaction.id];
+         }
+         
+         // Filter to only available items
+         const availableItems = itemsToPlace.filter((id: string) => {
+           const r = getReactionById(id);
+           return r && r.state === 'unused';
+         });
+         
+         if (availableItems.length > 0) {
+           const activePlate = getActivePlate();
+           const activeDefunctWells = activePlate ? getDefunctWellsForPlate(activePlate.id) : new Set();
+           const activeCCWells = activePlate ? getCCWellsForPlate(activePlate.id) : new Set();
+           
+           // Parse starting position
+           const col = targetPosition.charAt(0);
+           const row = parseInt(targetPosition.slice(1));
+           let currentCol = col.charCodeAt(0) - 65;
+           let currentRow = row - 1;
+           
+           const placedItems: string[] = [];
+           
+           availableItems.forEach((itemId: string) => {
+             // Skip defunct wells, CC wells, and occupied wells
+             while (currentCol < 8 && currentRow < 12) {
+               const position = `${String.fromCharCode(65 + currentCol)}${(currentRow + 1).toString().padStart(2, '0')}`;
+               if (!activeDefunctWells.has(position) && !activeCCWells.has(position) && !getReactionAtPosition(position, activePlate?.id)) {
+                 break;
+               }
+               currentCol++;
+               if (currentCol >= 8) {
+                 currentCol = 0;
+                 currentRow++;
+               }
+             }
+             
+             if (currentCol < 8 && currentRow < 12) {
+               const position = `${String.fromCharCode(65 + currentCol)}${(currentRow + 1).toString().padStart(2, '0')}`;
+               moveReaction(itemId, position);
+               placedItems.push(itemId);
+               
+               // Move to next position horizontally
+               currentCol++;
+               if (currentCol >= 8) {
+                 currentCol = 0;
+                 currentRow++;
+               }
+             }
+           });
+           
+           // Clear selection after successful placement
+           if (placedItems.length > 0) {
+             setSelectedItems(new Set());
+             setSelectedOrder([]);
+           }
+         }
       }
     }
     
-    setActiveExperiment(null);
-    setPreviewWells(new Set());
-    setIsMultiDrag(false);
+         setActiveExperiment(null);
+     setPreviewWells(new Set());
   };
 
   // Handler for well right click (cycle through: normal → defunct → CC → normal)
@@ -324,7 +367,14 @@ export default function Home() {
     // First, remove any existing reaction from this well
     const existingReaction = getReactionAtPosition(position, activePlate.id);
     if (existingReaction) {
-      moveReaction(existingReaction.id, 'unused');
+      // Check if this reaction belongs to the active list
+      const { getActiveReactionList } = useReactionsStore.getState();
+      const activeList = getActiveReactionList();
+      
+      if (activeList && activeList.reactions.some(r => r.id === existingReaction.id)) {
+        // Only remove reactions that belong to the active list
+        moveReaction(existingReaction.id, 'unused');
+      }
     }
 
     const defunctWells = getDefunctWellsForPlate(activePlate.id);
@@ -352,6 +402,15 @@ export default function Home() {
     const reaction = getReactionAtPosition(position, activePlate?.id);
     
     if (reaction) {
+      // Check if this reaction belongs to the active list
+      const { getActiveReactionList } = useReactionsStore.getState();
+      const activeList = getActiveReactionList();
+      
+      if (!activeList || !activeList.reactions.some(r => r.id === reaction.id)) {
+        // Reaction doesn't belong to active list, don't allow pickup
+        return;
+      }
+      
       setPickedUpReaction({ reaction, from: position });
       setActiveExperiment(reaction);
       // Remove the reaction from the well immediately
@@ -360,10 +419,9 @@ export default function Home() {
   };
 
   const wells = createWellGrid();
-  const usedItems = getUsedItems(); // Show all used items globally
+  const usedItems = getUsedItems(); 
   const activePlate = getActivePlate();
   
-  // Safety check - if no active plate, show loading or error state
   if (!activePlate) {
     return (
       <div className="flex h-screen bg-gray-50 w-[100vw] items-center justify-center">
@@ -766,8 +824,9 @@ export default function Home() {
       onDragOver={handleDragOver}
       onDragEnd={(event) => handleDragEnd(event)}
     >
-      <PlateMenu/>
-      <ClipboardParser />
+             <PlateMenu/>
+       
+       <ClipboardParser />
 
       <Toaster position="top-center" richColors />
 
@@ -776,15 +835,14 @@ export default function Home() {
         <div className="flex-1 flex">
           
           <div className="flex-1">
-            <WellGrid
-              wells={wells}
-              defunctWells={activeDefunctWells}
-              ccWells={activeCCWells}
-              previewWells={previewWells}
-              isMultiDrag={isMultiDrag}
-              onWellRightClick={handleWellRightClick}
-              onWellClick={handleWellClick}
-            />
+                         <WellGrid
+               wells={wells}
+               defunctWells={activeDefunctWells}
+               ccWells={activeCCWells}
+               previewWells={previewWells}
+               onWellRightClick={handleWellRightClick}
+               onWellClick={handleWellClick}
+             />
           </div>
           
           <Sidebar side='right'>
@@ -810,7 +868,6 @@ export default function Home() {
             <SidebarContent>
               <ScrollArea className="h-full">
                 <AppSidebar
-                  reactions={reactions}
                   selectedItems={selectedItems}
                   selectedOrder={selectedOrder}
                   usedItems={usedItems}
@@ -826,19 +883,19 @@ export default function Home() {
         </div>
       </div>
 
-      <DragOverlay>
-        {activeExperiment ? (
-          <div className="bg-white border-2 border-blue-300 rounded-md p-2 shadow-lg transform -translate-x-2 -translate-y-2">
-            <div className="text-sm font-medium text-blue-900">{activeExperiment.name}</div>
-            <div className="text-xs text-blue-700">{activeExperiment.primer}</div>
-            {isMultiDrag && (
-              <div className="text-xs text-blue-600 mt-1">
-                +{selectedItems.size - 1} more
-              </div>
-            )}
-          </div>
-        ) : null}
-      </DragOverlay>
+             <DragOverlay>
+         {activeExperiment ? (
+           <div className="bg-white border-2 border-blue-300 rounded-md p-2 shadow-lg transform -translate-x-2 -translate-y-2">
+             <div className="text-sm font-medium text-blue-900">{activeExperiment.name}</div>
+             <div className="text-xs text-blue-700">{activeExperiment.primer}</div>
+             {selectedItems.size > 1 && (
+               <div className="text-xs text-blue-600 mt-1">
+                 +{selectedItems.size - 1} more
+               </div>
+             )}
+           </div>
+         ) : null}
+       </DragOverlay>
     </DndContext>
   );
 }
