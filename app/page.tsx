@@ -626,7 +626,11 @@ export default function Home() {
         if (includePosition) {
           // Well mode - show sample position with original source plate prefix in middle area
           let wellModeContent = '-';
-          if (hasReaction) {
+          if (isDefunct) {
+            wellModeContent = 'Defunct';
+          } else if (isCC) {
+            wellModeContent = 'CC';
+          } else if (hasReaction) {
             if (well.reaction?.position) {
               // 3-column format: show source plate + position
               const sourceList = reactionLists.find(list => 
