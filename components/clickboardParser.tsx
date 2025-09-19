@@ -51,20 +51,32 @@ export default function ClipboardParser({ onParseSuccess, onParseError }: Clipbo
               return
             }
 
-            // Validate that we have exactly 2 columns
-            if (columns.length !== 2) {
+            // Support both 2-column and 3-column formats
+            if (columns.length !== 2 && columns.length !== 3) {
               hasValidationErrors = true
-              errorMessages.push(`第 ${rowIndex + 1} 行: 需要两列，只找到 ${columns.length} 列`)
+              errorMessages.push(`第 ${rowIndex + 1} 行: 需要两列或三列，只找到 ${columns.length} 列`)
               return
             }
 
-            const name = columns[0].trim().replace(/\//g, "-")
-            const primerData = columns[1].trim()
+            let position = ''; // Sample position (empty for 2-column format)
+            let name = '';
+            let primerData = '';
 
-            // Both columns must have non-empty data
+            if (columns.length === 2) {
+              // 2-column format: sample_name, primer (old way)
+              name = columns[0].trim().replace(/\//g, "-")
+              primerData = columns[1].trim()
+            } else {
+              // 3-column format: position, sample_name, primer (new way)
+              position = columns[0].trim() // Sample position (can be empty)
+              name = columns[1].trim().replace(/\//g, "-")
+              primerData = columns[2].trim()
+            }
+
+            // Name and primer columns must have non-empty data
             if (!name || !primerData) {
               hasValidationErrors = true
-              errorMessages.push(`第 ${rowIndex + 1} 行: 引物或样品为空`)
+              errorMessages.push(`第 ${rowIndex + 1} 行: 样品名称或引物为空`)
               return
             }
 
@@ -83,7 +95,8 @@ export default function ClipboardParser({ onParseSuccess, onParseError }: Clipbo
                     name: name,
                     primer: trimmedPrimer,
                     state: 'unused',
-                    plateId: undefined // No plate assigned - global list
+                    plateId: undefined, // No plate assigned - global list
+                    position: position || undefined // Include position if not empty
                   })
                   currentId++
                 }
@@ -100,7 +113,8 @@ export default function ClipboardParser({ onParseSuccess, onParseError }: Clipbo
                 name: name,
                 primer: primerData,
                 state: 'unused',
-                plateId: undefined // No plate assigned - global list
+                plateId: undefined, // No plate assigned - global list
+                position: position || undefined // Include position if not empty
               })
               currentId++
             }
@@ -141,7 +155,7 @@ export default function ClipboardParser({ onParseSuccess, onParseError }: Clipbo
             const errorMsg = "Clipboard 中没有找到合规数据"
             console.warn(errorMsg)
             toast.error(errorMsg, {
-              description: "Please ensure your clipboard contains tab-separated data with reaction names and primers.",
+              description: "Please ensure your clipboard contains tab-separated data with 2 columns (name, primer) or 3 columns (position, name, primer).",
               duration: 3000,
             })
             onParseError?.(errorMsg)

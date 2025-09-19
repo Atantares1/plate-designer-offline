@@ -4,6 +4,7 @@ export type Reaction = {
     primer: string;
     state: string;
     plateId?: string;
+    position?: string; // Sample position (can be empty)
 }
 
 export type Well = {

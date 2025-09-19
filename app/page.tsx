@@ -550,7 +550,7 @@ export default function Home() {
   };
 
   // Print plate layout function
-  const printPlateLayout = () => {
+  const printPlateLayout = (includePosition = false) => {
     const activePlate = getActivePlate();
     if (!activePlate) {
       toast.error('No active plate to print');
@@ -565,7 +565,7 @@ export default function Home() {
     }
 
     // Generate print HTML
-    const printHTML = generatePrintHTML();
+    const printHTML = generatePrintHTML(includePosition);
     
     printWindow.document.write(printHTML);
     printWindow.document.close();
@@ -578,7 +578,7 @@ export default function Home() {
   };
 
   // Generate HTML for printing
-  const generatePrintHTML = () => {
+  const generatePrintHTML = (includePosition = false) => {
     const activePlate = getActivePlate();
     if (!activePlate) return '';
 
@@ -622,13 +622,41 @@ export default function Home() {
           wellPrimer = well.reaction?.primer || '';
         }
         
-        wellsHTML += `
-          <div class="${wellClass}">
-            <div class="well-position">${position}</div>
-            <div class="well-content">${wellContent}</div>
-            <div class="well-primer" style="-webkit-print-color-adjust: exact; color-adjust: exact; print-color-adjust: exact;">${wellPrimer || ' '}</div>
-          </div>
-        `;
+        // Build well HTML based on includePosition flag
+        if (includePosition) {
+          // Well mode - show sample position with original source plate prefix in middle area
+          let wellModeContent = '-';
+          if (hasReaction) {
+            if (well.reaction?.position) {
+              // 3-column format: show source plate + position
+              const sourceList = reactionLists.find(list => 
+                list.reactions.some(r => r.id === well.reaction?.id)
+              );
+              const sourcePlateName = sourceList ? sourceList.name : 'unknown';
+              wellModeContent = `${sourcePlateName}-${well.reaction.position}`;
+            } else {
+              // 2-column format: just show sample name (no position info)
+              wellModeContent = well.reaction?.name || 'Reaction';
+            }
+          }
+          
+          wellsHTML += `
+            <div class="${wellClass}">
+              <div class="well-position">${position}</div>
+              <div class="well-content">${wellModeContent}</div>
+              <div class="well-primer" style="-webkit-print-color-adjust: exact; color-adjust: exact; print-color-adjust: exact;">${wellPrimer || ' '}</div>
+            </div>
+          `;
+        } else {
+          // Sample mode - original layout (sample name in middle)
+          wellsHTML += `
+            <div class="${wellClass}">
+              <div class="well-position">${position}</div>
+              <div class="well-content">${wellContent}</div>
+              <div class="well-primer" style="-webkit-print-color-adjust: exact; color-adjust: exact; print-color-adjust: exact;">${wellPrimer || ' '}</div>
+            </div>
+          `;
+        }
       });
     });
 
@@ -736,6 +764,27 @@ export default function Home() {
               align-items: center;
               justify-content: center;
             }
+            .well-sample-position {
+              font-size: 10px;
+              color: #1e40af;
+              word-break: break-all;
+              overflow: hidden;
+              max-width: 100%;
+              flex-shrink: 0;
+              -webkit-print-color-adjust: exact;
+              color-adjust: exact;
+              print-color-adjust: exact;
+              min-height: 16px;
+              height: 16px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              background-color: #dbeafe;
+              width: 100%;
+              padding: 2px 4px;
+              text-align: center;
+              font-weight: bold;
+            }
             .well-primer {
               font-size: 10px;
               color: #f00;
@@ -748,8 +797,8 @@ export default function Home() {
               -webkit-print-color-adjust: exact;
               color-adjust: exact;
               print-color-adjust: exact;
-              min-height: 18px;
-              height: 18px;
+              min-height: 16px;
+              height: 16px;
               display: flex;
               align-items: center;
               justify-content: center;
@@ -777,6 +826,21 @@ export default function Home() {
               }
               .well-content {
                 /* No background - inherits from well */
+              }
+              .well-sample-position {
+                background-color: #dbeafe !important;
+                -webkit-print-color-adjust: exact !important;
+                color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                color: #1e40af !important;
+                font-weight: bold !important;
+                width: 100% !important;
+                text-align: center !important;
+                min-height: 16px !important;
+                height: 16px !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
               }
               .well-primer {
                 background-color: white !important;
@@ -806,6 +870,7 @@ export default function Home() {
       </html>
     `;
   };
+
 
 
   // Show loading state during SSR
@@ -855,7 +920,18 @@ export default function Home() {
               TSV
             </Button>
 
-            <Button className="px-2 py-1 text-xs bg-blue-400 text-white rounded hover:bg-orange-300 transition-colors"  onClick={printPlateLayout}><Printer/></Button>
+            <Button variant="outline" className="w-10 px-2 py-1 text-xs  rounded hover:bg-orange-300 transition-colors flex flex-col items-center" onClick={() => printPlateLayout(true)}>
+              <div className="flex items-center justify-center mt-1">
+                <Printer className="w-4 h-4"/>
+              </div>
+              <span className="text-[8px] ">+Well</span>
+            </Button>
+            <Button className="w-10 px-2 py-1 text-xs bg-blue-400 text-white rounded hover:bg-orange-300 transition-colors flex flex-col items-center" onClick={() => printPlateLayout(false)}>
+              <div className="flex items-center justify-center mt-1">
+                <Printer className="w-4 h-4"/>
+              </div>
+              <span className="text-[8px]">Sample</span>
+            </Button>
             <Button 
               onClick={resetCurrentPlate}
               className="px-2 py-1 text-xs bg-blue-400 text-white rounded hover:bg-orange-300 transition-colors"

@@ -41,7 +41,7 @@ export function WellGrid({ wells, defunctWells, ccWells, previewWells, onWellRig
               </div>
               
               {col.map((well) => (
-                                 <DroppableWell
+                  <DroppableWell
                    key={`${well.col}${well.row}`}
                    well={well}
                    isDefunct={defunctWells?.has(`${well.col}${well.row.toString().padStart(2, '0')}`)}
