@@ -38,13 +38,12 @@ export default function Home() {
      getUsedItems,
      moveReaction,
      swapReactions,
-     toggleDefunctWell,
-     toggleCCWell,
+     cycleWellState,
+     resetPlate,
      getActivePlate,
      getReactionsForPlate,
      getDefunctWellsForPlate,
-     getCCWellsForPlate,
-     getAllReactions
+     getCCWellsForPlate
    } = useReactionsStore();
 
   const [activeExperiment, setActiveExperiment] = useState<Reaction | null>(null);
@@ -183,14 +182,12 @@ export default function Home() {
       setSelectedOrder(newSelectedOrder);
     } else if (event.shiftKey && lastSelectedIndex !== -1) {
       // Shift+click for range selection - use sorted reactions if available
-      const reactionsToUse = sortedReactions || getAllReactions().filter(r => r.state === 'unused');
+      const reactionsToUse = sortedReactions || activeList.reactions.filter(r => r.state === 'unused');
       const currentReactionIndex = currentIndex !== undefined ? currentIndex : reactionsToUse.findIndex(r => r.id === reactionId);
-      const lastSelectedReaction = getAllReactions()[lastSelectedIndex];
-      const lastSelectedReactionIndex = reactionsToUse.findIndex(r => r.id === lastSelectedReaction?.id);
       
-      if (currentReactionIndex !== -1 && lastSelectedReactionIndex !== -1) {
-        const startIndex = Math.min(lastSelectedReactionIndex, currentReactionIndex);
-        const endIndex = Math.max(lastSelectedReactionIndex, currentReactionIndex);
+      if (currentReactionIndex !== -1 && lastSelectedIndex < reactionsToUse.length) {
+        const startIndex = Math.min(lastSelectedIndex, currentReactionIndex);
+        const endIndex = Math.max(lastSelectedIndex, currentReactionIndex);
         
         const rangeIds = reactionsToUse.slice(startIndex, endIndex + 1).map(r => r.id);
         setSelectedItems(new Set(rangeIds));
@@ -202,7 +199,11 @@ export default function Home() {
       setSelectedOrder([reactionId]);
     }
     
-    setLastSelectedIndex(getAllReactions().findIndex(r => r.id === reactionId));
+    setLastSelectedIndex(
+      currentIndex !== undefined
+        ? currentIndex
+        : activeList.reactions.findIndex(r => r.id === reactionId)
+    );
   };
 
 
@@ -346,8 +347,7 @@ export default function Home() {
            
            // Clear selection after successful placement
            if (placedItems.length > 0) {
-             setSelectedItems(new Set());
-             setSelectedOrder([]);
+             clearSelection();
            }
          }
       }
@@ -364,36 +364,7 @@ export default function Home() {
     const activePlate = getActivePlate();
     if (!activePlate) return;
 
-    // First, remove any existing reaction from this well
-    const existingReaction = getReactionAtPosition(position, activePlate.id);
-    if (existingReaction) {
-      // Check if this reaction belongs to the active list
-      const { getActiveReactionList } = useReactionsStore.getState();
-      const activeList = getActiveReactionList();
-      
-      if (activeList && activeList.reactions.some(r => r.id === existingReaction.id)) {
-        // Only remove reactions that belong to the active list
-        moveReaction(existingReaction.id, 'unused');
-      }
-    }
-
-    const defunctWells = getDefunctWellsForPlate(activePlate.id);
-    const ccWells = getCCWellsForPlate(activePlate.id);
-    
-    const isDefunct = defunctWells.has(position);
-    const isCC = ccWells.has(position);
-    
-    if (!isDefunct && !isCC) {
-      // Normal → Defunct
-      toggleDefunctWell(activePlate.id, position);
-    } else if (isDefunct && !isCC) {
-      // Defunct → CC (remove from defunct, add to CC)
-      toggleDefunctWell(activePlate.id, position);
-      toggleCCWell(activePlate.id, position);
-    } else if (!isDefunct && isCC) {
-      // CC → Normal (remove from CC)
-      toggleCCWell(activePlate.id, position);
-    }
+    cycleWellState(activePlate.id, position);
   };
 
   // Handler for clicking a well to pick up a reaction
@@ -529,24 +500,7 @@ export default function Home() {
       return;
     }
 
-    // Move all reactions from this plate back to unused state
-    const plateReactions = getReactionsForPlate(activePlate.id);
-    plateReactions.forEach(reaction => {
-      moveReaction(reaction.id, 'unused');
-    });
-
-    // Clear defunct and CC wells for this plate
-    const defunctWells = getDefunctWellsForPlate(activePlate.id);
-    const ccWells = getCCWellsForPlate(activePlate.id);
-    
-    defunctWells.forEach(well => {
-      toggleDefunctWell(activePlate.id, well);
-    });
-    
-    ccWells.forEach(well => {
-      toggleCCWell(activePlate.id, well);
-    });
-
+    resetPlate(activePlate.id);
   };
 
   // Print plate layout function

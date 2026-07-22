@@ -31,6 +31,10 @@ interface DraggableItemProps {
 }
 
 function DraggableItem({ reaction, isSelected, selectedItems, selectedOrder, onClick }: DraggableItemProps) {
+  const orderedSelectedItems = [
+    ...selectedOrder.filter(id => selectedItems.has(id)),
+    ...Array.from(selectedItems).filter(id => !selectedOrder.includes(id))
+  ];
   const {
     attributes,
     listeners,
@@ -41,7 +45,7 @@ function DraggableItem({ reaction, isSelected, selectedItems, selectedOrder, onC
     id: reaction.id,
     data: {
       ...reaction,
-      selectedItems: Array.from(selectedItems),
+      selectedItems: isSelected ? orderedSelectedItems : [],
       isMultiDrag: selectedItems.size > 1 && selectedItems.has(reaction.id)
     },
   })

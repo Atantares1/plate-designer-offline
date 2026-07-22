@@ -1,8 +1,7 @@
 "use client"
 
-import { useEffect, useRef } from "react"
-import { useReactionsStore } from "@/store/data"
-import { Reaction } from "@/app/type"
+import { useEffect } from "react"
+import { ReactionDraft, useReactionsStore } from "@/store/data"
 import { toast } from "sonner"
 
 interface ClipboardParserProps {
@@ -11,13 +10,20 @@ interface ClipboardParserProps {
 }
 
 export default function ClipboardParser({ onParseSuccess, onParseError }: ClipboardParserProps) {
-  const { setReactions, clearSelection, getActiveReactionList } = useReactionsStore()
-  const idCounterRef = useRef(1)
+  const { setReactions, getActiveReactionList } = useReactionsStore()
 
   useEffect(() => {
     const handleKeyDown = async (event: KeyboardEvent) => {
       // Check for Ctrl+V (or Cmd+V on Mac)
-      if ((event.ctrlKey || event.metaKey) && event.key === "v") {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "v") {
+        const target = event.target
+        if (
+          target instanceof HTMLElement &&
+          (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))
+        ) {
+          return
+        }
+
         try {
           // Read clipboard text
           const clipboardText = await navigator.clipboard.readText()
@@ -36,8 +42,7 @@ export default function ClipboardParser({ onParseSuccess, onParseError }: Clipbo
 
           // Parse TSV data
           const rows = clipboardText.trim().split("\n")
-          const parsedReactions: Reaction[] = []
-          let currentId = idCounterRef.current
+          const parsedReactions: ReactionDraft[] = []
           let hasValidationErrors = false
           let errorMessages: string[] = []
 
@@ -91,14 +96,12 @@ export default function ClipboardParser({ onParseSuccess, onParseError }: Clipbo
                 if (trimmedPrimer) {
                   hasValidPrimers = true
                   parsedReactions.push({
-                    id: currentId.toString(),
                     name: name,
                     primer: trimmedPrimer,
                     state: 'unused',
                     plateId: undefined, // No plate assigned - global list
                     position: position || undefined // Include position if not empty
                   })
-                  currentId++
                 }
               })
               
@@ -109,14 +112,12 @@ export default function ClipboardParser({ onParseSuccess, onParseError }: Clipbo
             } else {
               // Single entry
               parsedReactions.push({
-                id: currentId.toString(),
                 name: name,
                 primer: primerData,
                 state: 'unused',
                 plateId: undefined, // No plate assigned - global list
                 position: position || undefined // Include position if not empty
               })
-              currentId++
             }
           })
 
@@ -132,14 +133,10 @@ export default function ClipboardParser({ onParseSuccess, onParseError }: Clipbo
             return
           }
 
-          // Update the ID counter ref
-          idCounterRef.current = currentId
-
           console.log("Parsed reactions:", parsedReactions)
 
           if (parsedReactions.length > 0) {
-            // Clear current selection and update reactions in the ACTIVE list only
-            clearSelection()
+            // The store allocates globally unique IDs and replaces the list atomically.
             setReactions(parsedReactions, activeList.id) // Pass the active list ID
             
             // Show success toast with more details
@@ -161,10 +158,18 @@ export default function ClipboardParser({ onParseSuccess, onParseError }: Clipbo
             onParseError?.(errorMsg)
           }
         } catch (error) {
-          const errorMsg = `Error reading clipboard: ${error}`
+          const isClipboardPermissionError =
+            error instanceof DOMException &&
+            (error.name === "NotAllowedError" || error.name === "SecurityError")
+          const detail = error instanceof Error ? error.message : String(error)
+          const errorMsg = isClipboardPermissionError
+            ? "Unable to read clipboard"
+            : "Unable to update reaction list"
           console.error(errorMsg)
           toast.error(errorMsg, {
-            description: "Make sure you have clipboard permissions and are using a supported browser.",
+            description: isClipboardPermissionError
+              ? "Make sure clipboard permission is enabled."
+              : detail,
             duration: 3000,
           })
           onParseError?.(errorMsg)
@@ -179,7 +184,7 @@ export default function ClipboardParser({ onParseSuccess, onParseError }: Clipbo
     return () => {
       document.removeEventListener("keydown", handleKeyDown)
     }
-  }, [setReactions, clearSelection, onParseSuccess, onParseError, getActiveReactionList])
+  }, [setReactions, onParseSuccess, onParseError, getActiveReactionList])
 
   // This component is invisible - it doesn't render anything
   return null
