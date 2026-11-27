@@ -507,7 +507,13 @@ export const useReactionsStore = create<ReactionsState>()(
         reactionLists: state.reactionLists.map(list => ({
           ...list,
           reactions: list.reactions.map(reaction =>
-            reaction.id === id ? { ...reaction, ...updates } : reaction
+            reaction.id === id ? {
+              ...reaction,
+              ...updates,
+              sampleNameParts: updates.name === undefined || updates.name === reaction.name
+                ? reaction.sampleNameParts
+                : undefined
+            } : reaction
           )
         }))
       })),

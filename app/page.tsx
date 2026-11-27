@@ -439,7 +439,8 @@ export default function Home() {
         // Determine sample name based on well state
         let sampleName = '-'; // Default for empty wells
         if (reaction) {
-          sampleName = `${reaction.name.replace(/-/g, '_')}_${reaction.primer}`;
+          const name = reaction.sampleNameParts?.join('_') ?? reaction.name;
+          sampleName = `${name}_${reaction.primer}`;
         } else if (isDefunct) {
           sampleName = 'Defunct';
         } else if (isCC) {

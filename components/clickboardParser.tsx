@@ -63,20 +63,11 @@ export default function ClipboardParser({ onParseSuccess, onParseError }: Clipbo
               return
             }
 
-            let position = ''; // Sample position (empty for 2-column format)
-            let name = '';
-            let primerData = '';
-
-            if (columns.length === 2) {
-              // 2-column format: sample_name, primer (old way)
-              name = columns[0].trim().replace(/\//g, "-")
-              primerData = columns[1].trim()
-            } else {
-              // 3-column format: position, sample_name, primer (new way)
-              position = columns[0].trim() // Sample position (can be empty)
-              name = columns[1].trim().replace(/\//g, "-")
-              primerData = columns[2].trim()
-            }
+            const [nameColumn, primerColumn] = columns.slice(-2)
+            const position = columns.length === 3 ? columns[0].trim() || undefined : undefined
+            const nameParts = nameColumn.trim().split("/")
+            const name = nameParts.join("-")
+            const primerData = primerColumn.trim()
 
             // Name and primer columns must have non-empty data
             if (!name || !primerData) {
@@ -85,38 +76,20 @@ export default function ClipboardParser({ onParseSuccess, onParseError }: Clipbo
               return
             }
 
-            // Check if primer column contains semicolon-separated values
-            if (primerData.includes(";")) {
-              // Split by semicolon and create separate entries
-              const primers = primerData.split(";")
-              let hasValidPrimers = false
-              
-              primers.forEach((primer) => {
-                const trimmedPrimer = primer.trim()
-                if (trimmedPrimer) {
-                  hasValidPrimers = true
-                  parsedReactions.push({
-                    name: name,
-                    primer: trimmedPrimer,
-                    state: 'unused',
-                    plateId: undefined, // No plate assigned - global list
-                    position: position || undefined // Include position if not empty
-                  })
-                }
-              })
-              
-              if (!hasValidPrimers) {
-                hasValidationErrors = true
-                errorMessages.push(`Row ${rowIndex + 1}: 引物不合规`)
-              }
-            } else {
-              // Single entry
+            const primers = primerData.split(";").map(primer => primer.trim()).filter(Boolean)
+            if (primers.length === 0) {
+              hasValidationErrors = true
+              errorMessages.push(`Row ${rowIndex + 1}: 引物不合规`)
+              return
+            }
+
+            for (const primer of primers) {
               parsedReactions.push({
-                name: name,
-                primer: primerData,
+                name,
+                sampleNameParts: nameParts.length > 1 ? nameParts : undefined,
+                primer,
                 state: 'unused',
-                plateId: undefined, // No plate assigned - global list
-                position: position || undefined // Include position if not empty
+                position
               })
             }
           })

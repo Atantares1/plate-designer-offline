@@ -1,6 +1,7 @@
 export type Reaction = {
     id: string;
     name: string;
+    sampleNameParts?: string[]; // Original slash-separated parts for TSV export
     primer: string;
     state: string;
     plateId?: string;
